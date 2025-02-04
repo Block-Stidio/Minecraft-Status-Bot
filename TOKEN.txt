@@ -1,1 +1,1 @@
-替換這一段文字，並在此輸入你的Discord Bot TOKEN！
+替换这一段文字，并在此输入你的Discord Bot TOKEN！
