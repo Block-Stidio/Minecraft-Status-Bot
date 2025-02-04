@@ -1,7 +1,5 @@
 ## 這個機器人由 Block Stidio 擁有完整版權！
 修改後，請注明來源 https://github.com/Block-Stidio/Minecraft-Status-Bot/ ！
-此機器人由 @ryan11035 製作。
-
 
 ## 使用方法：
 1. 雙擊bot.py啟動機器人（必須先安裝Python）
