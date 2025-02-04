@@ -1,0 +1,4 @@
+discord.py
+requests
+ping3
+mcstatus
