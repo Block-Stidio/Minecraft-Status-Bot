@@ -2,27 +2,27 @@ import discord
 import asyncio
 from mcstatus import JavaServer, BedrockServer
 
-# ==================== 配置區 ====================
+# ==================== 配置区 ====================
 
 TOKEN_FILE = "TOKEN.txt"  # Discord Bot Token 存放位置
-CHANNEL_ID = 1335773767900594268  # 設定要發送狀態的頻道 ID
-UPDATE_INTERVAL = 10  # 更新間隔（秒）
+CHANNEL_ID = 1335773767900594268  # 设置要发送状态的频道 ID
+UPDATE_INTERVAL = 10  # 更新间隔（秒）
 
-# Minecraft 伺服器列表
+# Minecraft 服务器列表
 SERVERS = [
     {"name": "Java 版", "ip": "ouo.freeserver.tw", "port": 24030, "type": "java"},
     {"name": "Bedrock 版", "ip": "be.whitecloud.us.kg", "port": 24030, "type": "bedrock"},
 ]
 
-# ==================== 讀取 TOKEN ====================
+# ==================== 读取 TOKEN ====================
 
 def get_token():
-    """ 從 TOKEN.txt 讀取 Bot Token """
+    """ 从 TOKEN.txt 读取 Bot Token """
     try:
         with open(TOKEN_FILE, "r", encoding="utf-8") as file:
             return file.read().strip()
     except FileNotFoundError:
-        print("❌ 錯誤：找不到 TOKEN.txt，請確認檔案是否存在！")
+        print("❌ 错误：找不到 TOKEN.txt，请确认文件是否存在！")
         exit(1)
 
 TOKEN = get_token()
@@ -32,10 +32,10 @@ TOKEN = get_token()
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 
-# ==================== 伺服器查詢功能 ====================
+# ==================== 服务器查询功能 ====================
 
 async def fetch_server_status(server):
-    """ 查詢 Minecraft 伺服器狀態（Java / Bedrock）"""
+    """ 查询 Minecraft 服务器状态（Java / Bedrock）"""
     try:
         if server["type"] == "java":
             srv = JavaServer.lookup(f"{server['ip']}:{server['port']}")
@@ -45,64 +45,64 @@ async def fetch_server_status(server):
             status = await srv.async_status()
 
         return {
-            "status": "在線 🟢",
+            "status": "在线 🟢",
             "online": status.players.online,
             "max_players": status.players.max,
             "latency": int(status.latency)
         }
 
     except Exception:
-        return {"status": "離線 🔴", "online": "N/A", "max_players": "N/A", "latency": "N/A"}
+        return {"status": "离线 🔴", "online": "N/A", "max_players": "N/A", "latency": "N/A"}
 
-# ==================== 產生嵌入訊息 ====================
+# ==================== 生成嵌入消息 ====================
 
 def generate_embed(server_statuses, countdown):
-    """ 根據查詢結果產生 Discord 的 Embed 訊息 """
-    embed_color = 0x00ff00  # 預設綠色
+    """ 根据查询结果生成 Discord 的 Embed 消息 """
+    embed_color = 0x00ff00  # 默认绿色
     total_players = sum(
-        int(status["online"]) if status["status"] == "在線 🟢" and isinstance(status["online"], int) else 0
+        int(status["online"]) if status["status"] == "在线 🟢" and isinstance(status["online"], int) else 0
         for status in server_statuses
     )
 
-    embed = discord.Embed(title="☁️白雲生存服☁️ 伺服器狀態", color=embed_color)
+    embed = discord.Embed(title="☁️白云生存服☁️ 服务器状态", color=embed_color)
 
     for server, status in zip(SERVERS, server_statuses):
         latency_text = f"{status['latency']}ms" if isinstance(status["latency"], int) else "N/A"
         embed.add_field(
             name=server["name"],
-            value=f"狀態：{status['status']}\n玩家：{status['online']}/{status['max_players']}\n延遲：{latency_text}",
+            value=f"状态：{status['status']}\n玩家：{status['online']}/{status['max_players']}\n延迟：{latency_text}",
             inline=False
         )
 
-    embed.add_field(name="總在線玩家", value=f"{total_players} 位玩家在線", inline=False)
-    embed.set_footer(text=f"下次刷新: {countdown} 秒後")
+    embed.add_field(name="总在线玩家", value=f"{total_players} 位玩家在线", inline=False)
+    embed.set_footer(text=f"下次刷新: {countdown} 秒后")
 
     return embed
 
-# ==================== Bot 啟動事件 ====================
+# ==================== Bot 启动事件 ====================
 
 @client.event
 async def on_ready():
-    """ Bot 啟動時執行 """
-    print(f"✅ 已登入 Discord，Bot 名稱：{client.user}")
+    """ Bot 启动时执行 """
+    print(f"✅ 已登录 Discord，Bot 名称：{client.user}")
     await send_status_loop()
 
 async def send_status_loop():
-    """ 定期更新 Minecraft 伺服器狀態 """
+    """ 定期更新 Minecraft 服务器状态 """
     await client.wait_until_ready()
     channel = client.get_channel(CHANNEL_ID)
 
     if not channel:
-        print("❌ 錯誤：找不到指定的頻道，請確認 CHANNEL_ID 是否正確！")
+        print("❌ 错误：找不到指定的频道，请确认 CHANNEL_ID 是否正确！")
         return
 
     message = None
 
     while not client.is_closed():
-        # 查詢所有伺服器狀態
+        # 查询所有服务器状态
         server_statuses = await asyncio.gather(*(fetch_server_status(server) for server in SERVERS))
 
-        # 倒數計時顯示
+        # 倒计时显示
         for countdown in range(UPDATE_INTERVAL, 0, -1):
             embed = generate_embed(server_statuses, countdown)
 
@@ -113,6 +113,6 @@ async def send_status_loop():
 
             await asyncio.sleep(1)
 
-        await asyncio.sleep(UPDATE_INTERVAL)  # 間隔時間
+        await asyncio.sleep(UPDATE_INTERVAL)  # 间隔时间
 
 client.run(TOKEN)
