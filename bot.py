@@ -1,172 +1,133 @@
 import discord
 import asyncio
 import json
-from discord import app_commands
+import os
+from dotenv import load_dotenv
 from mcstatus import JavaServer, BedrockServer
+from discord.ext import commands
 
-# ==================== 配置區 ====================
+# 載入 .env 變數
+load_dotenv()
+TOKEN = os.getenv("DISCORD_TOKEN")
 
-TOKEN_FILE = "TOKEN.txt"  # Discord Bot Token 存放位置
-LATENCY_CONFIG_FILE = "latency_threshold.json"  # 儲存使用者設定的延遲警告
-CHANNEL_ID = 1335773767900594268  # 設定要發送狀態的頻道 ID
-UPDATE_INTERVAL = 10  # 更新間隔（秒）
+# 讀取 config.json 設置
+def load_config():
+    with open("config.json", "r", encoding="utf-8") as f:
+        return json.load(f)
 
-# Minecraft 伺服器列表
-SERVERS = [
-    {"name": "Java 版", "ip": "ouo.freeserver.tw", "port": 24030, "type": "java"},
-    {"name": "Bedrock 版", "ip": "be.whitecloud.us.kg", "port": 24030, "type": "bedrock"},
-]
+# 初始化配置
+config = load_config()
+CHANNEL_ID = config["channel_id"]
+SERVERS = config["servers"]
+MODE = config["mode"]
 
-# ==================== 讀取 / 儲存 延遲警告設定 ====================
-
-def load_latency_threshold():
-    """ 讀取使用者設定的延遲警告門檻 """
-    try:
-        with open(LATENCY_CONFIG_FILE, "r", encoding="utf-8") as file:
-            return json.load(file).get("latency_threshold", 400)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return 400  # 預設為 400ms
-
-def save_latency_threshold(value):
-    """ 儲存使用者設定的延遲警告門檻 """
-    with open(LATENCY_CONFIG_FILE, "w", encoding="utf-8") as file:
-        json.dump({"latency_threshold": value}, file)
-
-LATENCY_THRESHOLD = load_latency_threshold()
-
-# ==================== 讀取 TOKEN ====================
-
-def get_token():
-    """ 從 TOKEN.txt 讀取 Bot Token """
-    try:
-        with open(TOKEN_FILE, "r", encoding="utf-8") as file:
-            return file.read().strip()
-    except FileNotFoundError:
-        print("❌ 錯誤：找不到 TOKEN.txt，請確認檔案是否存在！")
-        exit(1)
-
-TOKEN = get_token()
-
-# ==================== Discord Bot 初始化 ====================
-
+# 設置機器人
 intents = discord.Intents.default()
-client = discord.Client(intents=intents)
-tree = app_commands.CommandTree(client)
+intents.message_content = True  # 啟用消息內容意圖
+bot = commands.Bot(command_prefix='/', intents=intents)
 
-# ==================== 伺服器查詢功能 ====================
+# 記錄訊息對象以便編輯
+message_cache = None
 
-async def fetch_server_status(server):
-    """ 查詢 Minecraft 伺服器狀態（Java / Bedrock）"""
-    try:
-        if server["type"] == "java":
-            srv = JavaServer.lookup(f"{server['ip']}:{server['port']}")
-            status = await srv.async_status()
-        else:
-            srv = BedrockServer.lookup(f"{server['ip']}:{server['port']}")
-            status = await srv.async_status()
+# 更新伺服器狀態
+async def update_status():
+    global message_cache
+    await bot.wait_until_ready()
 
-        return {
-            "status": "在線 🟢",
-            "online": status.players.online,
-            "max_players": status.players.max,
-            "latency": int(status.latency)
-        }
-
-    except Exception:
-        return {"status": "離線 🔴", "online": "N/A", "max_players": "N/A", "latency": "N/A"}
-
-# ==================== 產生嵌入訊息 ====================
-
-def get_latency_symbol(latency):
-    """ 根據延遲數值返回對應的符號 """
-    if latency > LATENCY_THRESHOLD:
-        return "⚠️"
-    elif latency > 100:
-        return "🔴"
-    elif latency > 50:
-        return "🟡"
-    else:
-        return "🟢"
-
-def generate_embed(server_statuses, countdown):
-    """ 根據查詢結果產生 Discord 的 Embed 訊息 """
-    embed_color = 0x00ff00  # 預設綠色
-    total_players = sum(
-        int(status["online"]) if status["status"] == "在線 🟢" and isinstance(status["online"], int) else 0
-        for status in server_statuses
-    )
-
-    embed = discord.Embed(title="Minecraft 伺服器狀態", color=embed_color)
-
-    for server, status in zip(SERVERS, server_statuses):
-        if isinstance(status["latency"], int):
-            latency_symbol = get_latency_symbol(status["latency"])
-            latency_text = f"{status['latency']}ms {latency_symbol}"
-        else:
-            latency_text = "N/A"
-
-        embed.add_field(
-            name=server["name"],
-            value=f"狀態：{status['status']}\n玩家：{status['online']}/{status['max_players']}\n延遲：{latency_text}",
-            inline=False
-        )
-
-    embed.add_field(name="總在線玩家", value=f"{total_players} 位玩家在線", inline=False)
-    embed.set_footer(text=f"下次刷新: {countdown} 秒後")
-
-    return embed
-
-# ==================== Bot 指令 - 設定延遲警告門檻 ====================
-
-@tree.command(name="警告門檻修改", description="修改延遲警告門檻（單位：毫秒）")
-async def set_latency_warning(interaction: discord.Interaction, value: int):
-    """ Slash 指令 /警告門檻修改 <數值> """
-    global LATENCY_THRESHOLD
-
-    if value < 100:
-        await interaction.response.send_message("⚠️ 延遲警告門檻不可低於 100ms！", ephemeral=True)
-        return
-
-    LATENCY_THRESHOLD = value
-    save_latency_threshold(value)
-
-    await interaction.response.send_message(f"✅ 延遲警告門檻已設定為 `{value}ms`！", ephemeral=False)
-
-# ==================== Bot 啟動事件 ====================
-
-@client.event
-async def on_ready():
-    """ Bot 啟動時執行 """
-    await tree.sync()
-    print(f"✅ 已登入 Discord，Bot 名稱：{client.user}")
-    await send_status_loop()
-
-async def send_status_loop():
-    """ 定期更新 Minecraft 伺服器狀態 """
-    await client.wait_until_ready()
-    channel = client.get_channel(CHANNEL_ID)
-
+    channel = bot.get_channel(CHANNEL_ID)
     if not channel:
-        print("❌ 錯誤：找不到指定的頻道，請確認 CHANNEL_ID 是否正確！")
+        print("找不到指定的頻道，請檢查 channel_id 是否正確")
         return
 
-    message = None
+    while not bot.is_closed():
+        try:
+            total_players = 0
+            server_count = 0
+            embed = discord.Embed(title="Minecraft 伺服器狀態", color=0x2ECC71)
 
-    while not client.is_closed():
-        # 查詢所有伺服器狀態
-        server_statuses = await asyncio.gather(*(fetch_server_status(server) for server in SERVERS))
+            for server in SERVERS:
+                name, ip, port, server_type = server["name"], server["ip"], server["port"], server["type"]
+                try:
+                    if server_type == "java":
+                        mc_server = JavaServer.lookup(f"{ip}:{port}")
+                        status = mc_server.status()
+                    else:
+                        mc_server = BedrockServer.lookup(f"{ip}:{port}")
+                        status = mc_server.status()
 
-        # 倒數計時顯示
-        for countdown in range(UPDATE_INTERVAL, 0, -1):
-            embed = generate_embed(server_statuses, countdown)
+                    players = status.players.online
+                    max_players = status.players.max
+                    latency = round(status.latency)
+                    total_players += players
+                    server_count += 1
 
-            if message is None:
-                message = await channel.send(embed=embed)
+                    if latency < 50:
+                        latency_display = f"{latency}ms 🟢"
+                    elif 50 <= latency <= 150:
+                        latency_display = f"{latency}ms 🟡"
+                    elif 150 < latency <= 300:
+                        latency_display = f"{latency}ms 🔴"
+                    else:
+                        latency_display = f"{latency}ms ⚠️"
+
+                    embed.add_field(
+                        name=f"**{name}**",
+                        value=f"狀態：🟢 在線\n玩家：{players}/{max_players}\n延遲：{latency_display}",
+                        inline=False
+                    )
+                except:
+                    embed.add_field(
+                        name=f"**{name}**",
+                        value="狀態：🔴 離線",
+                        inline=False
+                    )
+
+            if MODE == "geyser" and server_count > 0:
+                total_players //= 2
+
+            embed.add_field(name="**總在線玩家**", value=f"{total_players} 位玩家在線", inline=False)
+            embed.set_footer(text="狀態更新中...")
+
+            # 編輯原訊息或發送新訊息
+            if message_cache:
+                try:
+                    await message_cache.edit(embed=embed)
+                except discord.NotFound:
+                    message_cache = await channel.send(embed=embed)
             else:
-                await message.edit(embed=embed)
+                message_cache = await channel.send(embed=embed)
 
-            await asyncio.sleep(1)
+        except Exception as e:
+            print(f"更新狀態時發生錯誤: {e}")
 
-        await asyncio.sleep(UPDATE_INTERVAL)  # 間隔時間
+        await asyncio.sleep(5)  # 每 5 秒更新玩家數量
 
-client.run(TOKEN)
+# 當機器人啟動時執行的程式
+@bot.event
+async def on_ready():
+    print(f"已登入為 {bot.user}")
+    bot.loop.create_task(update_status())
+
+# 重新載入設定檔指令
+@bot.command(name="重新載入")
+async def reload(ctx):
+    if ctx.author.guild_permissions.administrator:  # 確保是管理員使用
+        try:
+            # 重新載入設定檔
+            global config
+            config = load_config()
+
+            # 更新頻道 ID 和伺服器設置等
+            global CHANNEL_ID, SERVERS, MODE
+            CHANNEL_ID = config["channel_id"]
+            SERVERS = config["servers"]
+            MODE = config["mode"]
+
+            await ctx.send("設定已重新載入！")
+        except Exception as e:
+            await ctx.send(f"重新載入時發生錯誤: {e}")
+    else:
+        await ctx.send("你沒有權限使用這個指令！")
+
+# 啟動機器人
+bot.run(TOKEN)

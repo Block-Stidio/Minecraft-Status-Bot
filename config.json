@@ -1,0 +1,18 @@
+{
+    "channel_id": 1335773767900594268,
+    "mode": "geyser",
+    "servers": [
+        {
+            "name": "Java 伺服器",
+            "ip": "ouo.freeserver.tw",
+            "port": 24030,
+            "type": "java"
+        },
+        {
+            "name": "Bedrock 伺服器",
+            "ip": "ouo.freeserver.tw",
+            "port": 24030,
+            "type": "bedrock"
+        }
+    ]
+}
