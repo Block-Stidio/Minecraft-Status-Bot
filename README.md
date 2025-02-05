@@ -1,4 +1,4 @@
-## 這個機器人由 Block Stidio 擁有完整版權！
+## 這個機器人由 Block Studio 擁有完整版權！
 修改後，請注明來源 https://github.com/Block-Stidio/Minecraft-Status-Bot/ ！
 
 ## 使用方法：
